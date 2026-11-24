@@ -4,23 +4,31 @@
 
 ## 启动
 
-准备 Linux/amd64 Docker Engine、Docker Compose v2 和 Python 3.11+。Windows 可用 Docker Desktop 的 Linux 容器模式，在有 Docker 集成的 WSL 中执行 Linux 命令也可以。首次在线启动需要能下载 GHCR、Docker Hub 的镜像。模型调用需要可用的 DeepSeek API Key 和出站网络。
+部署需要 Linux/amd64 容器、Docker Compose v2 和 Python 3.10 或更高版本。Ubuntu 22.04 可使用系统的 Python 3.10，初始化脚本只依赖 Python 标准库。Windows 使用 Docker Desktop 的 Linux 容器模式，WSL 可使用已集成的 Docker。首次在线启动需要能下载 GHCR、Docker Hub 的镜像。模型调用需要可用的 DeepSeek API Key 和出站网络。
 
 解压 Release 源码包或克隆本仓库，打开该目录的终端。
 
 **Windows**
 
-优先双击 `Start.cmd`。它可以使用已有的 Python 3.11+，或从放在同一目录的官方便携 Python ZIP 准备本地运行环境。已有 Python 的电脑也可以在 PowerShell 执行：
+优先双击 `Start.cmd`。它可以使用已有的 Python 3.10+，或从放在同一目录的官方便携 Python ZIP 准备本地运行环境。已有 Python 的电脑也可以在 PowerShell 执行：
 
 ```powershell
 py -3 setup.py
 ```
 
-**Linux 或 WSL**
+**Ubuntu 22.04 / Linux / WSL**
+
+在可读写的部署目录中操作，例如运维分配的项目目录。先确认当前账号能访问 Docker daemon，服务器架构应显示 `x86_64`。
 
 ```bash
+uname -m
+python3 --version
+docker version --format '{{.Server.Version}}'
+docker compose version
 python3 setup.py
 ```
+
+数据使用 Docker 命名卷，按该服务器已有的 Docker 数据目录存放。`docker info --format '{{.DockerRootDir}}'` 可查看实际位置。离线环境先按 [OFFLINE.md](OFFLINE.md) 校验和导入镜像，再执行 `python3 setup.py --offline`。
 
 按提示输入一个至少 12 个字符的统一评测密码和共享 DeepSeek Key。计划员及物流员可分别输入自己的 Key，直接回车则沿用共享 Key。脚本通过应用的注册、邀请、接受邀请和密码登录接口创建账号，并逐一验证进入同一个频道。已有凭据和存储卷会复用。修复中断的首次初始化时，请输入原密码。
 
@@ -54,7 +62,12 @@ docker compose logs --tail 80 agentes
 
 初始化生成的 `.env` 内含此部署专用的数据库密码和凭据加密密钥。数据库保存在 `pgdata` 命名卷，上传文件保存在 `files` 卷。备份或迁移现有数据时需要同时保管这两个卷与该部署原来的 `.env`。初始登录密码由用户输入，模型 Key 通过应用接口保存。自动化环境可从秘密管理器注入 `EVAL_PASSWORD`、`DEEPSEEK_API_KEY`、`PLANNING_DEEPSEEK_API_KEY`、`LOGISTICS_DEEPSEEK_API_KEY`。这些变量用于初始化进程，不应写入仓库。
 
-默认仅绑定本机 `127.0.0.1`。在内网 Linux 服务器上验证时，可从客户端运行 `ssh -N -L 18813:127.0.0.1:18813 用户@服务器`，然后打开上述 localhost 网页。团队常态访问时可先在本机完成首次初始化，再在反向代理配置内网 HTTPS 域名，并把 `.env` 的 `PUBLIC_URL` 改为相同来源，执行 `docker compose up -d`。代理应转发全部页面、API 和 WebSocket 到同一应用。保留域名和端口的一致性。[上游自托管文档](https://github.com/agentes-chat/agentes-chat/blob/f409224e48dc374cc0709227e57807d18c3a11e9/SELF_HOSTING.md)
+## 从办公电脑访问服务器
+
+应用默认只监听服务器的 `127.0.0.1:18813`。首次初始化后，在服务器执行 `curl -fsS http://127.0.0.1:18813/api/health` 可检查应用就绪状态。
+
+- **个人试用。** 如果 SSH 和堡垒机策略允许本地端口转发，在办公电脑执行 `ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18813:127.0.0.1:18813 用户@服务器`。保持终端开启，然后打开 [http://localhost:18813/login](http://localhost:18813/login)。若客户端的 18813 已被占用，可在首次部署选一个两端都空闲的端口（如 `--port 18823`），在命令和网址中同步替换端口。
+- **团队共用或堡垒机禁用转发。** 先在服务器本机完成初始化，由运维将已批准的内网 HTTPS 域名代理到同机 `127.0.0.1:18813`。把 `.env` 的 `PUBLIC_URL` 改为该 HTTPS 来源（带非标准端口时需包含端口），再执行 `docker compose up -d`。所有人使用该域名的 `/login`。代理应保留 Host，转发页面、API 与 WebSocket 升级请求。[上游自托管文档](https://github.com/agentes-chat/agentes-chat/blob/f409224e48dc374cc0709227e57807d18c3a11e9/SELF_HOSTING.md)
 
 ## 固定版本与离线启动
 
