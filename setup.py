@@ -13,16 +13,12 @@ from http.cookiejar import CookieJar
 from urllib import error, parse, request
 
 ROOT = Path(__file__).resolve().parent
+# The Windows embeddable distribution omits the script directory from sys.path.
+sys.path.insert(0, str(ROOT))
+from images import RELEASE_NAME, prepare_images
+
 ORG = "本地产品测评"
 MODEL = "deepseek-flash"
-IMAGES = [
-    ("ghcr.io/agentes-chat/agentes@sha256:b66c777d5aedf46571c9a52acdd7be2fd7cdc9dd8f9536cc6800a7a03897a610",
-     "sha256:f38dab1f5cf0dd07aeb367b21d1cc3ef5a1f6f49db8e3bce226ee835c8d111f5",
-     "agentes-evaluation/agentes:v0.1.7-f38dab1f5cf0"),
-    ("pgvector/pgvector:0.8.7-pg18@sha256:2358fcba361ed2233a5ed81b5fe4ca779ccb304120ce531a3bf51c0ed7e2bc11",
-     "sha256:55141572004e92a39edfdc2d16e821c214b64ca4fba50c1f7e408a09a3d04aff",
-     "agentes-evaluation/pgvector:pg18-55141572004e"),
-]
 PEOPLE = {"admin": "评测管理员", "planning": "计划员", "logistics": "物流员"}
 AGENTS = [
     ("planning", "wms", "WMS 助手",
@@ -36,20 +32,6 @@ def docker(*args, quiet=False, check=True):
     return subprocess.run(["docker", *args], cwd=ROOT, check=check,
                           stdout=subprocess.PIPE if quiet else None,
                           stderr=subprocess.PIPE if quiet else None, text=True)
-
-
-def prepare_images(offline):
-    for ref, identity, tag in IMAGES:
-        def present():
-            result = docker("image", "inspect", "--format", "{{.Id}}", identity, quiet=True, check=False)
-            return result.returncode == 0 and result.stdout.strip() == identity
-        if not present():
-            if offline:
-                raise ValueError("缺少指定版本的离线镜像，请先 docker load 或联网运行。")
-            docker("pull", "--platform", "linux/amd64", ref)
-            if not present():
-                raise ValueError("镜像与评测的 linux/amd64 配置摘要不一致。")
-        docker("tag", identity, tag)
 
 
 def config(port):
@@ -210,11 +192,22 @@ def prepare_agents(c, org, channel, people, ids):
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--port", type=int, help="首次启动使用的本机 HTTP 端口，默认 18813")
-    ap.add_argument("--offline", action="store_true", help="仅使用已导入的匹配镜像")
+    ap.add_argument("--offline", action="store_true", help="从本地引擎或离线归档准备镜像，跳过联网拉取")
+    ap.add_argument("--image-archive", type=Path, help="私有 Release 中的原版双镜像归档路径")
+    ap.add_argument("--import-only", action="store_true", help="只准备已锁定的离线镜像，不启动服务或创建账号")
     args = ap.parse_args()
     if args.port is not None and not 1 <= args.port <= 65535: ap.error("端口超出范围")
+    archive = args.image_archive
+    if archive is not None and not archive.is_file():
+        raise ValueError("找不到所指定的镜像归档。")
+    if archive is None and (ROOT / RELEASE_NAME).is_file():
+        archive = ROOT / RELEASE_NAME
+    if args.import_only:
+        prepare_images(True, archive)
+        print("应用和数据库镜像已就绪。")
+        return
     docker("compose","version",quiet=True)
-    prepare_images(args.offline)
+    prepare_images(args.offline, archive)
     port, url = config(args.port)
     if url not in (f"http://localhost:{port}", f"http://127.0.0.1:{port}"):
         raise ValueError("请使用原本机回环 PUBLIC_URL 初始化，再按 README 配置内网域名。")

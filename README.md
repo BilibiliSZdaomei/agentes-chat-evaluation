@@ -78,10 +78,10 @@ docker compose logs --tail 80 agentes
 
 agentes.chat 的源代码 revision 来自运行镜像 OCI 标签。[上游对应提交](https://github.com/agentes-chat/agentes-chat/tree/f409224e48dc374cc0709227e57807d18c3a11e9)
 
-私有 Release 的离线镜像及校验步骤见 [OFFLINE.md](OFFLINE.md)。离线安装时先 `docker load -i 镜像归档.tar` 导入两张镜像，之后用 `python3 setup.py --offline` 或 `py -3 setup.py --offline`。也可在成功初始化的联网电脑上运行下面的命令自行制作镜像归档。它导出镜像，不含运行卷、账号数据或模型凭据。
+私有 Release 的离线镜像及校验步骤见 [OFFLINE.md](OFFLINE.md)。将 Release 原包 `agentes-amd64.tar.gz` 放在脚本旁，用 `python3 setup.py --offline` 或 `Start.cmd --offline` 导入并启动。归档位于其他目录时追加 `--image-archive 文件路径`。也可在成功初始化的联网电脑上运行下面的命令自行制作镜像归档。它导出镜像，不含运行卷、账号数据或模型凭据。
 
 ```bash
 docker image save -o agentes-images.tar agentes-evaluation/agentes:v0.1.7-f38dab1f5cf0 agentes-evaluation/pgvector:pg18-55141572004e
 ```
 
-脚本逐个校验本地镜像的内容 ID，找不到匹配版本时，在线模式按固定摘要拉取。离线模式不拉取镜像。使用云端 DeepSeek 模型时，应用仍需访问提供商的 API。
+脚本按固定摘要核验镜像。经典存储读取配置 ID，Docker 29 的 containerd 存储读取与同一配置对应的 linux/amd64 manifest。在线模式缺镜像时从固定的源摘要拉取。离线模式不拉取镜像。使用云端 DeepSeek 模型时，应用仍需访问提供商的 API。
