@@ -1,0 +1,50 @@
+name: agentes-evaluation
+services:
+  postgres:
+    image: agentes-evaluation/pgvector:pg18-55141572004e
+    platform: linux/amd64
+    pull_policy: never
+    environment:
+      POSTGRES_USER: agentes
+      POSTGRES_DB: agentes
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run setup.py first}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "agentes", "-d", "agentes"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+  agentes:
+    image: agentes-evaluation/agentes:v0.1.7-f38dab1f5cf0
+    platform: linux/amd64
+    pull_policy: never
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL:?run setup.py first}
+      AGENTES_SECRET: ${AGENTES_SECRET:?run setup.py first}
+      DATABASE_URL: postgres://agentes:${POSTGRES_PASSWORD}@postgres:5432/agentes
+      FILES_DIR: /data/files
+      PORT: "3000"
+      NODE_ENV: production
+      TELEMETRY: "off"
+    volumes:
+      - files:/data/files
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-18813}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    stop_grace_period: 40s
+    restart: unless-stopped
+volumes:
+  pgdata:
+  files:
